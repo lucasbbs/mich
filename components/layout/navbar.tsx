@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/", label: "Overview" },
   { href: "/admin", label: "Game Builder" },
+  { href: "/admin/live", label: "Live Sessions" },
+  { href: "/admin/sessions", label: "Session Library" },
   { href: "/play", label: "Play" },
   { href: "/stats", label: "Stats" },
 ];
