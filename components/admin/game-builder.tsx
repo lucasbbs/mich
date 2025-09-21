@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import clsx from "clsx";
 import type { ChangeEvent } from "react";
@@ -21,7 +21,7 @@ interface WordFormState {
   orientation: Orientation;
   startRow: number;
   startCol: number;
-  hint: string;
+  hints: string[];
 }
 
 type BannerType = "info" | "success" | "error";
@@ -54,6 +54,10 @@ function describeIssue(issue: PlacementIssue): string {
   return "Unable to place the word with the current configuration.";
 }
 
+function ensureHintArray(hints: string[]): string[] {
+  return hints.length ? hints : [""];
+}
+
 export default function GameBuilder() {
   const [rows, setRows] = useState(DEFAULT_ROWS);
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
@@ -67,7 +71,7 @@ export default function GameBuilder() {
     orientation: "horizontal",
     startRow: 1,
     startCol: 1,
-    hint: "",
+    hints: [""],
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
@@ -130,7 +134,7 @@ export default function GameBuilder() {
       words: sortedWords.map(({ id, ...word }) => ({
         number: word.number,
         answer: word.answer,
-        hint: word.hint,
+        hints: word.hints,
         orientation: word.orientation,
         start: word.start,
         cells: word.cells,
@@ -164,6 +168,7 @@ export default function GameBuilder() {
       setFormState((previous) => ({
         ...previous,
         number: nextNumber,
+        hints: ensureHintArray(previous.hints),
       }));
       return;
     }
@@ -174,7 +179,7 @@ export default function GameBuilder() {
       orientation: editingWord.orientation,
       startRow: editingWord.start.row,
       startCol: editingWord.start.col,
-      hint: editingWord.hint,
+      hints: ensureHintArray(editingWord.hints.map((hint) => hint)),
     });
   }, [editingWord, nextNumber]);
 
@@ -320,9 +325,12 @@ export default function GameBuilder() {
       orientation: "horizontal",
       startRow: Math.min(previous.startRow, rows),
       startCol: Math.min(previous.startCol, columns),
-      hint: "",
+      hints: [""],
     }));
   };
+
+  const normalizedHints = (hints: string[]) =>
+    hints.map((hint) => hint.trim()).filter((hint) => hint.length > 0);
 
   const handleSaveWord = () => {
     setFormError(null);
@@ -347,9 +355,9 @@ export default function GameBuilder() {
       return;
     }
 
-    const trimmedHint = formState.hint.trim();
-    if (!trimmedHint) {
-      setFormError("Every word needs a hint before it can be saved.");
+    const cleanedHints = normalizedHints(formState.hints);
+    if (!cleanedHints.length) {
+      setFormError("Add at least one hint for this word.");
       return;
     }
 
@@ -389,7 +397,7 @@ export default function GameBuilder() {
       id: editingWordId ?? crypto.randomUUID(),
       number: formState.number,
       answer: normalizedAnswer,
-      hint: trimmedHint,
+      hints: cleanedHints,
       orientation: formState.orientation,
       start: {
         row: formState.startRow,
@@ -423,6 +431,38 @@ export default function GameBuilder() {
       resetForm();
     }
     showBanner("success", `Removed word ${word.number}.`);
+  };
+
+  const handleHintChange = (index: number, value: string) => {
+    setFormState((previous) => {
+      const nextHints = [...previous.hints];
+      nextHints[index] = value;
+      return {
+        ...previous,
+        hints: ensureHintArray(nextHints),
+      };
+    });
+  };
+
+  const handleAddHint = () => {
+    setFormState((previous) => ({
+      ...previous,
+      hints: [...previous.hints, ""],
+    }));
+  };
+
+  const handleRemoveHint = (index: number) => {
+    setFormState((previous) => {
+      if (previous.hints.length === 1) {
+        return previous;
+      }
+
+      const nextHints = previous.hints.filter((_, idx) => idx !== index);
+      return {
+        ...previous,
+        hints: ensureHintArray(nextHints),
+      };
+    });
   };
 
   return (
@@ -576,7 +616,7 @@ export default function GameBuilder() {
               {editingWord ? `Edit word ${editingWord.number}` : "Add a word"}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Set the clue number, answer, direction, and hint. Start row and
+              Set the clue number, answer, direction, and hints. Start row and
               column are 1-indexed.
             </p>
 
@@ -677,21 +717,43 @@ export default function GameBuilder() {
                 </div>
               </div>
 
-              <label className="flex flex-col text-sm font-medium text-slate-600">
-                Hint
-                <textarea
-                  value={formState.hint}
-                  onChange={(event) =>
-                    setFormState((previous) => ({
-                      ...previous,
-                      hint: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  placeholder="Describe the answer or give solvers a nudge."
-                  className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
-                />
-              </label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-600">Hints</span>
+                  <button
+                    type="button"
+                    onClick={handleAddHint}
+                    className="inline-flex items-center justify-center rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-500 hover:text-slate-900"
+                  >
+                    Add another hint
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {formState.hints.map((hint, index) => (
+                    <div key={`hint-${index}`} className="rounded-2xl border border-slate-200 p-3">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                        <span>Hint {index + 1}</span>
+                        {formState.hints.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveHint(index)}
+                            className="rounded-full border border-rose-200 px-2 py-0.5 text-rose-600 transition hover:border-rose-400 hover:text-rose-700"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        value={hint}
+                        onChange={(event) => handleHintChange(index, event.target.value)}
+                        rows={2}
+                        placeholder="Describe the answer or give solvers a nudge."
+                        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {formError && (
@@ -776,7 +838,13 @@ export default function GameBuilder() {
                       </button>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">Hint: {word.hint}</p>
+                  <div className="mt-2 space-y-1 text-xs text-slate-600">
+                    {word.hints.map((hint, index) => (
+                      <div key={`${word.id}-hint-${index}`}>
+                        Hint {index + 1}: {hint}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
