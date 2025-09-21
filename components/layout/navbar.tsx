@@ -8,6 +8,7 @@ const links = [
   { href: "/", label: "Overview" },
   { href: "/admin", label: "Game Builder" },
   { href: "/play", label: "Play" },
+  { href: "/stats", label: "Stats" },
 ];
 
 export default function Navbar() {

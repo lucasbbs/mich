@@ -1,9 +1,15 @@
 ﻿"use client";
 
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { GameWord } from "@/lib/game";
-import { SAMPLE_GAMES, buildLetterMap, toCellKey } from "@/lib/game";
+import {
+  SAMPLE_GAMES,
+  buildLetterMap,
+  saveSession,
+  toCellKey,
+  type StoredSession,
+} from "@/lib/game";
 
 interface WordProgress extends GameWord {
   revealedHints: number;
@@ -74,6 +80,7 @@ export default function GamePlayer() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [summary, setSummary] = useState<ScoreSummary | null>(null);
+  const [activeWordId, setActiveWordId] = useState<string | null>(null);
 
   const game = useMemo(
     () =>
@@ -88,6 +95,7 @@ export default function GamePlayer() {
       setElapsed(0);
       setStartTime(null);
       setFrozen(false);
+      setActiveWordId(null);
       return;
     }
 
@@ -96,6 +104,7 @@ export default function GamePlayer() {
     setElapsed(0);
     setStartTime(Date.now());
     setFrozen(false);
+    setActiveWordId(game.words[0]?.id ?? null);
   }, [game]);
 
   useEffect(() => {
@@ -111,22 +120,49 @@ export default function GamePlayer() {
   }, [frozen, startTime]);
 
   useEffect(() => {
-    if (!words.length) {
+    if (!words.length || !game || !startTime) {
       return;
     }
 
     const allDone = words.every((word) => word.completed);
-    if (allDone && !frozen && startTime) {
+    if (allDone && !frozen) {
       const now = Date.now();
       const totalSeconds = (now - startTime) / 1000;
       const score = computeScore(words, totalSeconds);
 
+      const session: StoredSession = {
+        id: crypto.randomUUID(),
+        gameId: game.id,
+        gameTitle: game.title,
+        finalScore: score.finalScore,
+        correctWords: score.correctWords,
+        totalHintsUsed: score.totalHintsUsed,
+        completionTimeSeconds: score.completionTimeSeconds,
+        playedAt: new Date(now).toISOString(),
+      };
+
+      saveSession(session);
       setSummary(score);
       setFrozen(true);
       setElapsed(totalSeconds);
     }
-  }, [words, frozen, startTime]);
+  }, [words, frozen, startTime, game]);
 
+  useEffect(() => {
+    if (!activeWordId) {
+      return;
+    }
+
+    const exists = words.some((word) => word.id === activeWordId);
+    if (!exists) {
+      setActiveWordId(null);
+    }
+  }, [words, activeWordId]);
+
+  const activeWord = useMemo(
+    () => words.find((word) => word.id === activeWordId) ?? null,
+    [words, activeWordId],
+  );
   const completedWords = useMemo(
     () => words.filter((word) => word.completed),
     [words],
@@ -141,10 +177,23 @@ export default function GamePlayer() {
     );
     return new Set(keys);
   }, [completedWords]);
+  const activeCells = useMemo(() => {
+    if (!activeWord) {
+      return new Set<string>();
+    }
+    return new Set(
+      activeWord.cells.map((cell) => toCellKey(cell.row, cell.col)),
+    );
+  }, [activeWord]);
   const disabledCells = useMemo(() => new Set(game?.disabledCells ?? []), [game]);
   const solvedCount = completedWords.length;
 
+  const selectWord = (wordId: string) => {
+    setActiveWordId((current) => (current === wordId ? current : wordId));
+  };
+
   const handleGuessChange = (id: string, value: string) => {
+    selectWord(id);
     setWords((previous) =>
       previous.map((word) => {
         if (word.id !== id) {
@@ -159,6 +208,7 @@ export default function GamePlayer() {
   };
 
   const handleSubmitGuess = (word: WordProgress) => {
+    selectWord(word.id);
     const candidate = word.guess.replace(/\s+/g, "").toUpperCase();
 
     setWords((previous) =>
@@ -183,6 +233,7 @@ export default function GamePlayer() {
   };
 
   const handleRevealHint = (word: WordProgress) => {
+    selectWord(word.id);
     setWords((previous) =>
       previous.map((item) => {
         if (item.id !== word.id) {
@@ -209,6 +260,17 @@ export default function GamePlayer() {
     setFrozen(false);
     setElapsed(0);
     setStartTime(Date.now());
+    setActiveWordId(game.words[0]?.id ?? null);
+  };
+
+  const handleWordCardKeyDown = (
+    event: KeyboardEvent<HTMLDivElement>,
+    wordId: string,
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectWord(wordId);
+    }
   };
 
   return (
@@ -270,7 +332,7 @@ export default function GamePlayer() {
             <h2 className="text-lg font-semibold text-slate-900">Board</h2>
             <p className="mt-1 text-xs text-slate-500">
               Numbers mark each clue's starting cell. Solved answers glow and
-              lock their letters in place.
+              lock their letters in place. Selecting a clue highlights its path.
             </p>
 
             <div className="mt-6 overflow-x-auto">
@@ -290,6 +352,7 @@ export default function GamePlayer() {
                       const disabled = disabledCells.has(key);
                       const letter = letterMap[key] ?? "";
                       const isSolvedCell = completedCells.has(key);
+                      const isActiveCell = activeCells.has(key);
 
                       const numbers = words
                         .filter(
@@ -309,6 +372,8 @@ export default function GamePlayer() {
                               : "border-slate-300 bg-white text-slate-800",
                             isSolvedCell &&
                               "border-emerald-300 bg-emerald-600 text-white shadow-inner",
+                            isActiveCell &&
+                              "ring-2 ring-indigo-400 ring-offset-2 ring-offset-white",
                           )}
                         >
                           {numbers.length > 0 && (
@@ -330,23 +395,30 @@ export default function GamePlayer() {
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">Clues</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Reveal hints to help solve each clue. Every hint deducts points
-                from that word's final value.
+                Click a clue to highlight its path on the board. Reveal hints as
+                needed—each hint deducts from that clue's score.
               </p>
 
               <div className="mt-4 space-y-4">
                 {words.map((word) => {
                   const isComplete = word.completed;
                   const remainingHints = word.hints.length - word.revealedHints;
+                  const isActive = activeWordId === word.id;
 
                   return (
                     <div
                       key={word.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => selectWord(word.id)}
+                      onKeyDown={(event) => handleWordCardKeyDown(event, word.id)}
                       className={clsx(
-                        "rounded-2xl border px-4 py-3 transition",
+                        "rounded-2xl border px-4 py-3 transition focus:outline-none",
                         isComplete
                           ? "border-emerald-200 bg-emerald-50"
                           : "border-slate-200 bg-slate-50",
+                        isActive &&
+                          "border-indigo-300 bg-indigo-50 ring-2 ring-indigo-200",
                       )}
                     >
                       <div className="flex items-center justify-between gap-4">
@@ -383,7 +455,10 @@ export default function GamePlayer() {
                         {remainingHints > 0 && !isComplete && (
                           <button
                             type="button"
-                            onClick={() => handleRevealHint(word)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleRevealHint(word);
+                            }}
                             className="inline-flex items-center justify-center rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-500 hover:text-slate-900"
                           >
                             Reveal hint ({remainingHints} left)
@@ -395,6 +470,7 @@ export default function GamePlayer() {
                           onChange={(event) =>
                             handleGuessChange(word.id, event.target.value)
                           }
+                          onFocus={() => selectWord(word.id)}
                           disabled={isComplete}
                           placeholder="Type your answer"
                           className={clsx(
@@ -406,7 +482,10 @@ export default function GamePlayer() {
                         />
                         <button
                           type="button"
-                          onClick={() => handleSubmitGuess(word)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSubmitGuess(word);
+                          }}
                           disabled={isComplete}
                           className={clsx(
                             "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition",
