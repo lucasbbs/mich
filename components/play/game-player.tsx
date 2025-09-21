@@ -127,15 +127,22 @@ export default function GamePlayer() {
     }
   }, [words, frozen, startTime]);
 
+  const completedWords = useMemo(
+    () => words.filter((word) => word.completed),
+    [words],
+  );
   const letterMap = useMemo(
-    () => buildLetterMap(words.filter((word) => word.completed)),
-    [words],
+    () => buildLetterMap(completedWords),
+    [completedWords],
   );
+  const completedCells = useMemo(() => {
+    const keys = completedWords.flatMap((word) =>
+      word.cells.map((cell) => toCellKey(cell.row, cell.col)),
+    );
+    return new Set(keys);
+  }, [completedWords]);
   const disabledCells = useMemo(() => new Set(game?.disabledCells ?? []), [game]);
-  const solvedCount = useMemo(
-    () => words.filter((word) => word.completed).length,
-    [words],
-  );
+  const solvedCount = completedWords.length;
 
   const handleGuessChange = (id: string, value: string) => {
     setWords((previous) =>
@@ -262,8 +269,8 @@ export default function GamePlayer() {
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Board</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Numbers mark each clue's starting cell. Solved answers lock their
-              letters in place.
+              Numbers mark each clue's starting cell. Solved answers glow and
+              lock their letters in place.
             </p>
 
             <div className="mt-6 overflow-x-auto">
@@ -282,6 +289,7 @@ export default function GamePlayer() {
                       const key = toCellKey(row, col);
                       const disabled = disabledCells.has(key);
                       const letter = letterMap[key] ?? "";
+                      const isSolvedCell = completedCells.has(key);
 
                       const numbers = words
                         .filter(
@@ -299,7 +307,8 @@ export default function GamePlayer() {
                             disabled
                               ? "border-dashed border-slate-300 bg-slate-100 text-slate-400"
                               : "border-slate-300 bg-white text-slate-800",
-                            letter && !disabled && "bg-slate-900 text-white",
+                            isSolvedCell &&
+                              "border-emerald-300 bg-emerald-600 text-white shadow-inner",
                           )}
                         >
                           {numbers.length > 0 && (
