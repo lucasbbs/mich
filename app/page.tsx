@@ -1,168 +1,76 @@
-import Card from "@/components/home/card";
-import { DEPLOY_URL } from "@/lib/constants";
-import { Github, Twitter } from "@/components/shared/icons";
-import WebVitals from "@/components/home/web-vitals";
-import ComponentGrid from "@/components/home/component-grid";
-import Image from "next/image";
-import { nFormatter } from "@/lib/utils";
-
-export default async function Home() {
-  const { stargazers_count: stars } = await fetch(
-    "https://api.github.com/repos/steven-tey/precedent",
-    {
-      ...(process.env.GITHUB_OAUTH_TOKEN && {
-        headers: {
-          Authorization: `Bearer ${process.env.GITHUB_OAUTH_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }),
-      // data will revalidate every 24 hours
-      next: { revalidate: 86400 },
-    },
-  )
-    .then((res) => res.json())
-    .catch((e) => console.log(e));
-
-  return (
-    <>
-      <div className="z-10 w-full max-w-xl px-5 xl:px-0">
-        <a
-          href="https://twitter.com/steventey/status/1613928948915920896"
-          target="_blank"
-          rel="noreferrer"
-          className="mx-auto mb-5 flex max-w-fit animate-fade-up items-center justify-center space-x-2 overflow-hidden rounded-full bg-blue-100 px-7 py-2 transition-colors hover:bg-blue-200"
-        >
-          <Twitter className="h-5 w-5 text-[#1d9bf0]" />
-          <p className="text-sm font-semibold text-[#1d9bf0]">
-            Introducing Precedent
-          </p>
-        </a>
-        <h1
-          className="animate-fade-up bg-gradient-to-br from-black to-stone-500 bg-clip-text text-center font-display text-4xl font-bold tracking-[-0.02em] text-transparent opacity-0 drop-shadow-sm [text-wrap:balance] md:text-7xl md:leading-[5rem]"
-          style={{ animationDelay: "0.15s", animationFillMode: "forwards" }}
-        >
-          Building blocks for your Next project
-        </h1>
-        <p
-          className="mt-6 animate-fade-up text-center text-gray-500 opacity-0 [text-wrap:balance] md:text-xl"
-          style={{ animationDelay: "0.25s", animationFillMode: "forwards" }}
-        >
-          An opinionated collection of components, hooks, and utilities for your
-          Next.js project.
-        </p>
-        <div
-          className="mx-auto mt-6 flex animate-fade-up items-center justify-center space-x-5 opacity-0"
-          style={{ animationDelay: "0.3s", animationFillMode: "forwards" }}
-        >
-          <a
-            className="group flex max-w-fit items-center justify-center space-x-2 rounded-full border border-black bg-black px-5 py-2 text-sm text-white transition-colors hover:bg-white hover:text-black"
-            href={DEPLOY_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <svg
-              className="h-4 w-4 group-hover:text-black"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M12 4L20 20H4L12 4Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <p>Deploy to Vercel</p>
-          </a>
-          <a
-            className="flex max-w-fit items-center justify-center space-x-2 rounded-full border border-gray-300 bg-white px-5 py-2 text-sm text-gray-600 shadow-md transition-colors hover:border-gray-800"
-            href="https://github.com/steven-tey/precedent"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Github />
-            <p>
-              <span className="hidden sm:inline-block">Star on</span> GitHub{" "}
-              <span className="font-semibold">{nFormatter(stars)}</span>
-            </p>
-          </a>
-        </div>
-      </div>
-      <div className="my-10 grid w-full max-w-screen-xl animate-fade-up grid-cols-1 gap-5 px-5 md:grid-cols-3 xl:px-0">
-        {features.map(({ title, description, demo, large }) => (
-          <Card
-            key={title}
-            title={title}
-            description={description}
-            demo={
-              title === "Beautiful, reusable components" ? (
-                <ComponentGrid />
-              ) : (
-                demo
-              )
-            }
-            large={large}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
+﻿'use client';
+import Link from "next/link";
+import { ArrowRight, Grid, Lightbulb, Pencil } from "lucide-react";
 
 const features = [
   {
-    title: "Beautiful, reusable components",
+    title: "Flexible grids",
     description:
-      "Pre-built beautiful, a11y-first components, powered by [Tailwind CSS](https://tailwindcss.com), [Radix UI](https://www.radix-ui.com), and [Framer Motion](https://framer.com/motion). Used in production on [Dub.co](https://dub.co).",
-    large: true,
+      "Define board dimensions that match your puzzle vision, from compact teasers to sprawling canvases.",
+    icon: Grid,
   },
   {
-    title: "Performance first",
+    title: "Targeted clues",
     description:
-      "Built on [Next.js](https://nextjs.org/) primitives like `@next/font` and `next/image` for stellar performance.",
-    demo: <WebVitals />,
+      "Pair every word with a numbered clue and hint so solvers always know where to focus next.",
+    icon: Lightbulb,
   },
   {
-    title: "One-click Deploy",
+    title: "Precise control",
     description:
-      "Jumpstart your next project by deploying Precedent to [Vercel](https://vercel.com/) in one click.",
-    demo: (
-      <a href={DEPLOY_URL}>
-        <Image
-          src="https://vercel.com/button"
-          alt="Deploy with Vercel"
-          width={120}
-          height={30}
-          unoptimized
-        />
-      </a>
-    ),
-  },
-  {
-    title: "Built-in Auth",
-    description:
-      "Precedent comes with authentication via [Clerk](https://clerk.com/)",
-    demo: (
-      <div className="flex items-center justify-center space-x-20">
-        <Image alt="Clerk logo" src="/clerk.svg" width={50} height={50} />
-      </div>
-    ),
-  },
-  {
-    title: "Hooks, utilities, and more",
-    description:
-      "Precedent offers a collection of hooks, utilities, and `@vercel/og`",
-    demo: (
-      <div className="grid grid-flow-col grid-rows-3 gap-10 p-10">
-        <span className="font-mono font-semibold">useIntersectionObserver</span>
-        <span className="font-mono font-semibold">useLocalStorage</span>
-        <span className="font-mono font-semibold">useScroll</span>
-        <span className="font-mono font-semibold">nFormatter</span>
-        <span className="font-mono font-semibold">capitalize</span>
-        <span className="font-mono font-semibold">truncate</span>
-      </div>
-    ),
+      "Disable cells, manage conflicting letters, and fine-tune every placement before publishing.",
+    icon: Pencil,
   },
 ];
+
+export default function Home() {
+  return (
+    <div className="space-y-16">
+      <section className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm">
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
+          Word Grid Studio
+        </p>
+        <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          Build smarter word puzzles with a guided admin workspace.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-slate-600">
+          Start by shaping your board, deactivate unused cells, then layer in numbered clues with
+          letter-perfect placement. Everything lives in one focused flow so you can concentrate on
+          crafting delightful challenges.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-4">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+          >
+            Open the game builder
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+          <a
+            href="#builder-overview"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+          >
+            See what's included
+          </a>
+        </div>
+      </section>
+      <section id="builder-overview" className="space-y-6">
+        <h2 className="font-display text-2xl font-semibold text-slate-900">
+          Admin tools designed for thoughtful puzzle design
+        </h2>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {features.map(({ icon: Icon, title, description }) => (
+            <div
+              key={title}
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+              <Icon className="h-10 w-10 text-slate-500" />
+              <h3 className="mt-4 text-lg font-semibold text-slate-900">{title}</h3>
+              <p className="mt-2 text-sm text-slate-600">{description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
