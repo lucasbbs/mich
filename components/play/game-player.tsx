@@ -185,7 +185,10 @@ export default function GamePlayer() {
       activeWord.cells.map((cell) => toCellKey(cell.row, cell.col)),
     );
   }, [activeWord]);
-  const disabledCells = useMemo(() => new Set(game?.disabledCells ?? []), [game]);
+  const disabledCells = useMemo(
+    () => new Set(game?.disabledCells ?? []),
+    [game],
+  );
   const solvedCount = completedWords.length;
 
   const selectWord = (wordId: string) => {
@@ -331,8 +334,9 @@ export default function GamePlayer() {
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Board</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Numbers mark each clue's starting cell. Solved answers glow and
-              lock their letters in place. Selecting a clue highlights its path.
+              Numbers mark each clue&apos;s starting cell. Solved answers glow
+              and lock their letters in place. Selecting a clue highlights its
+              path.
             </p>
 
             <div className="mt-6 overflow-x-auto">
@@ -345,46 +349,48 @@ export default function GamePlayer() {
               >
                 {Array.from({ length: game.rows }).map((_, rowIndex) => (
                   <div key={`row-${rowIndex}`} className="contents">
-                    {Array.from({ length: game.columns }).map((__, columnIndex) => {
-                      const row = rowIndex + 1;
-                      const col = columnIndex + 1;
-                      const key = toCellKey(row, col);
-                      const disabled = disabledCells.has(key);
-                      const letter = letterMap[key] ?? "";
-                      const isSolvedCell = completedCells.has(key);
-                      const isActiveCell = activeCells.has(key);
+                    {Array.from({ length: game.columns }).map(
+                      (__, columnIndex) => {
+                        const row = rowIndex + 1;
+                        const col = columnIndex + 1;
+                        const key = toCellKey(row, col);
+                        const disabled = disabledCells.has(key);
+                        const letter = letterMap[key] ?? "";
+                        const isSolvedCell = completedCells.has(key);
+                        const isActiveCell = activeCells.has(key);
 
-                      const numbers = words
-                        .filter(
-                          (word) =>
-                            word.start.row === row && word.start.col === col,
-                        )
-                        .map((word) => word.number)
-                        .sort((a, b) => a - b);
+                        const numbers = words
+                          .filter(
+                            (word) =>
+                              word.start.row === row && word.start.col === col,
+                          )
+                          .map((word) => word.number)
+                          .sort((a, b) => a - b);
 
-                      return (
-                        <div
-                          key={key}
-                          className={clsx(
-                            "relative aspect-square select-none rounded-md border text-center text-lg font-semibold uppercase transition",
-                            disabled
-                              ? "border-dashed border-slate-300 bg-slate-100 text-slate-400"
-                              : "border-slate-300 bg-white text-slate-800",
-                            isSolvedCell &&
-                              "border-emerald-300 bg-emerald-600 text-white shadow-inner",
-                            isActiveCell &&
-                              "ring-2 ring-indigo-400 ring-offset-2 ring-offset-white",
-                          )}
-                        >
-                          {numbers.length > 0 && (
-                            <span className="absolute left-1 top-1 text-[0.6rem] font-semibold text-slate-500">
-                              {numbers.join("/")}
-                            </span>
-                          )}
-                          {letter}
-                        </div>
-                      );
-                    })}
+                        return (
+                          <div
+                            key={key}
+                            className={clsx(
+                              "relative aspect-square select-none rounded-md border text-center text-lg font-semibold uppercase transition",
+                              disabled
+                                ? "border-dashed border-slate-300 bg-slate-100 text-slate-400"
+                                : "border-slate-300 bg-white text-slate-800",
+                              isSolvedCell &&
+                                "border-emerald-300 bg-emerald-600 text-white shadow-inner",
+                              isActiveCell &&
+                                "ring-2 ring-indigo-400 ring-offset-2 ring-offset-white",
+                            )}
+                          >
+                            {numbers.length > 0 && (
+                              <span className="absolute left-1 top-1 text-[0.6rem] font-semibold text-slate-500">
+                                {numbers.join("/")}
+                              </span>
+                            )}
+                            {letter}
+                          </div>
+                        );
+                      },
+                    )}
                   </div>
                 ))}
               </div>
@@ -396,7 +402,7 @@ export default function GamePlayer() {
               <h2 className="text-lg font-semibold text-slate-900">Clues</h2>
               <p className="mt-1 text-xs text-slate-500">
                 Click a clue to highlight its path on the board. Reveal hints as
-                needed—each hint deducts from that clue's score.
+                needed—each hint deducts from that clue&apos;s score.
               </p>
 
               <div className="mt-4 space-y-4">
@@ -411,7 +417,9 @@ export default function GamePlayer() {
                       role="button"
                       tabIndex={0}
                       onClick={() => selectWord(word.id)}
-                      onKeyDown={(event) => handleWordCardKeyDown(event, word.id)}
+                      onKeyDown={(event) =>
+                        handleWordCardKeyDown(event, word.id)
+                      }
                       className={clsx(
                         "rounded-2xl border px-4 py-3 transition focus:outline-none",
                         isComplete
@@ -427,7 +435,8 @@ export default function GamePlayer() {
                             {word.number}. {word.orientation.replace("-", " ")}
                           </div>
                           <div className="text-xs text-slate-500">
-                            Starts at row {word.start.row}, column {word.start.col}
+                            Starts at row {word.start.row}, column{" "}
+                            {word.start.col}
                           </div>
                         </div>
                         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -509,11 +518,15 @@ export default function GamePlayer() {
                 <div className="mt-3 space-y-2 text-sm text-slate-700">
                   <div className="flex items-center justify-between">
                     <span>Correct words</span>
-                    <span className="font-semibold">{summary.correctWords}</span>
+                    <span className="font-semibold">
+                      {summary.correctWords}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Total hints used</span>
-                    <span className="font-semibold">{summary.totalHintsUsed}</span>
+                    <span className="font-semibold">
+                      {summary.totalHintsUsed}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Time</span>

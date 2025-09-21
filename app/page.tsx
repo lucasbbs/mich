@@ -1,4 +1,4 @@
-﻿'use client';
+﻿"use client";
 import Link from "next/link";
 import { ArrowRight, Grid, Lightbulb, Pencil } from "lucide-react";
 
@@ -34,9 +34,9 @@ export default function Home() {
           Build smarter word puzzles with a guided admin workspace.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-slate-600">
-          Start by shaping your board, deactivate unused cells, then layer in numbered clues with
-          letter-perfect placement. Everything lives in one focused flow so you can concentrate on
-          crafting delightful challenges.
+          Start by shaping your board, deactivate unused cells, then layer in
+          numbered clues with letter-perfect placement. Everything lives in one
+          focused flow so you can concentrate on crafting delightful challenges.
         </p>
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
@@ -50,7 +50,7 @@ export default function Home() {
             href="#builder-overview"
             className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
           >
-            See what's included
+            See what&apos;s included
           </a>
         </div>
       </section>
@@ -65,7 +65,9 @@ export default function Home() {
               className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
             >
               <Icon className="h-10 w-10 text-slate-500" />
-              <h3 className="mt-4 text-lg font-semibold text-slate-900">{title}</h3>
+              <h3 className="mt-4 text-lg font-semibold text-slate-900">
+                {title}
+              </h3>
               <p className="mt-2 text-sm text-slate-600">{description}</p>
             </div>
           ))}

@@ -43,7 +43,10 @@ function loadLiveSessions(): LiveSessionRecord[] {
 
 function saveLiveSessions(records: LiveSessionRecord[]) {
   try {
-    window.localStorage.setItem(ADMIN_LIVE_SESSIONS_KEY, JSON.stringify(records));
+    window.localStorage.setItem(
+      ADMIN_LIVE_SESSIONS_KEY,
+      JSON.stringify(records),
+    );
   } catch (error) {
     console.error("Failed to persist live sessions", error);
   }
@@ -84,7 +87,9 @@ export default function LiveSessionLauncher() {
     if (!selectedGame) {
       return null;
     }
-    return playerStats.find((session) => session.gameId === selectedGame.id) ?? null;
+    return (
+      playerStats.find((session) => session.gameId === selectedGame.id) ?? null
+    );
   }, [playerStats, selectedGame]);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -149,9 +154,9 @@ export default function LiveSessionLauncher() {
             Launch a live session
           </h1>
           <p className="max-w-2xl text-sm text-slate-600">
-            Spin up a real-time puzzle game just like Kahoot. Share the join code
-            or QR code with players, then use the host token to run the game from
-            your facilitator view.
+            Spin up a real-time puzzle game just like Kahoot. Share the join
+            code or QR code with players, then use the host token to run the
+            game from your facilitator view.
           </p>
         </div>
       </header>
@@ -234,8 +239,8 @@ export default function LiveSessionLauncher() {
 
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
             <p>
-              We'll generate a join code your players can enter, plus a host token
-              to authenticate the facilitator app.
+              We&apos;ll generate a join code your players can enter, plus a
+              host token to authenticate the facilitator app.
             </p>
             {errorMessage && (
               <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-600">
@@ -261,7 +266,9 @@ export default function LiveSessionLauncher() {
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-slate-900">Recent live sessions</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Recent live sessions
+          </h2>
           <button
             type="button"
             onClick={clearSessions}
@@ -273,7 +280,7 @@ export default function LiveSessionLauncher() {
 
         {sessions.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-100 p-6 text-center text-sm text-slate-500">
-            You haven't launched a live session yet.
+            You haven&apos;t launched a live session yet.
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -295,7 +302,10 @@ export default function LiveSessionLauncher() {
                         {new Date(session.createdAt).toLocaleString()}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">
-                        Host: <span className="font-semibold text-slate-800">{session.hostName}</span>
+                        Host:{" "}
+                        <span className="font-semibold text-slate-800">
+                          {session.hostName}
+                        </span>
                       </p>
                     </div>
                     <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
@@ -362,7 +372,9 @@ export default function LiveSessionLauncher() {
 
                     <div className="flex flex-col items-center justify-center gap-2">
                       <QRCodeCanvas value={joinUrl} size={120} includeMargin />
-                      <span className="text-[11px] text-slate-500">Scan to join</span>
+                      <span className="text-[11px] text-slate-500">
+                        Scan to join
+                      </span>
                     </div>
                   </div>
                 </div>
