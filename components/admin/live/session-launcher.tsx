@@ -1,13 +1,14 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 import clsx from "clsx";
 import {
   SAMPLE_GAMES,
   createLiveSession,
-  type StoredSession,
   loadSessions,
+  type StoredSession,
 } from "@/lib/game";
 
 interface LiveSessionRecord {
@@ -21,13 +22,43 @@ interface LiveSessionRecord {
   notes?: string;
 }
 
+interface SessionState {
+  code: string;
+  status: "lobby" | "active" | "finished";
+  currentWordId: string | null;
+  gameId: string;
+  createdAt: number;
+  players: SessionPlayer[];
+}
+
+interface SessionPlayer {
+  id: string;
+  name: string;
+  score: number;
+  hintsUsed: number;
+  totalTimeMs: number;
+  joinedAt: number;
+}
+
+interface SessionClosedPayload {
+  reason?: string;
+}
+
 const ADMIN_LIVE_SESSIONS_KEY = "word-grid-studio:live-session-log";
+
+const EDGE_HTTP_BASE = (
+  process.env.NEXT_PUBLIC_SUPABASE_EDGE_URL ??
+  "https://bhqgxqkkwkvgoefpvkse.supabase.co/functions/v1"
+).replace(/\/$/, "");
+
+const FUNCTION_NAME = process.env.NEXT_PUBLIC_LIVE_FUNCTION_NAME ?? "";
+
+const EDGE_WS_BASE = EDGE_HTTP_BASE.replace(/^http/, "ws");
 
 function loadLiveSessions(): LiveSessionRecord[] {
   if (typeof window === "undefined") {
     return [];
   }
-
   try {
     const raw = window.localStorage.getItem(ADMIN_LIVE_SESSIONS_KEY);
     if (!raw) {
@@ -52,7 +83,7 @@ function saveLiveSessions(records: LiveSessionRecord[]) {
   }
 }
 
-function formatClock(seconds: number): string {
+function formatClock(seconds: number) {
   const minutes = Math.floor(seconds / 60)
     .toString()
     .padStart(2, "0");
@@ -60,6 +91,203 @@ function formatClock(seconds: number): string {
     .toString()
     .padStart(2, "0");
   return `${minutes}:${secs}`;
+}
+
+function leaderboard(players: SessionPlayer[]) {
+  return [...players].sort(
+    (a, b) => b.score - a.score || a.hintsUsed - b.hintsUsed,
+  );
+}
+
+function HostConsole({
+  record,
+  initiallyOpen,
+}: {
+  record: LiveSessionRecord;
+  initiallyOpen: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const [connectionState, setConnectionState] = useState<
+    "idle" | "connecting" | "connected" | "closed"
+  >(initiallyOpen ? "connecting" : "idle");
+  const [sessionState, setSessionState] = useState<SessionState | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      socketRef.current?.close();
+      return;
+    }
+
+    const wsUrl = `${EDGE_WS_BASE}/${FUNCTION_NAME}?role=host&code=${encodeURIComponent(
+      record.joinCode,
+    )}&token=${encodeURIComponent(record.hostToken)}&name=${encodeURIComponent(
+      record.hostName,
+    )}`;
+
+    setConnectionState("connecting");
+    setErrorMessage(null);
+
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      setConnectionState("connected");
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string);
+        if (data?.type === "session_state") {
+          setSessionState(data.payload as SessionState);
+        } else if (data?.type === "session_closed") {
+          const payload = data.payload as SessionClosedPayload;
+          setErrorMessage(payload.reason ?? "Session closed");
+          setConnectionState("closed");
+          socket.close();
+        }
+      } catch (error) {
+        console.error("Failed to parse host message", error);
+      }
+    };
+
+    socket.onerror = (event) => {
+      console.error("Host socket error", event);
+      setErrorMessage("Connection error");
+      setConnectionState("closed");
+    };
+
+    socket.onclose = () => {
+      setConnectionState("closed");
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, [open, record.hostName, record.hostToken, record.joinCode]);
+
+  const sendMessage = (payload: unknown) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(payload));
+    }
+  };
+
+  const players = leaderboard(sessionState?.players ?? []);
+
+  return (
+    <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-900">Host console</h3>
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+        >
+          {open ? "Hide" : "Open"}
+        </button>
+      </div>
+
+      {open ? (
+        <div className="mt-4 space-y-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>
+              Status:
+              <span className="ml-1 font-semibold text-slate-800">
+                {connectionState === "connected" && sessionState
+                  ? sessionState.status === "lobby"
+                    ? "Lobby"
+                    : sessionState.status === "active"
+                    ? "Active"
+                    : "Finished"
+                  : connectionState === "connecting"
+                  ? "Connecting"
+                  : "Disconnected"}
+              </span>
+            </span>
+            <span>Players: {sessionState?.players.length ?? 0}</span>
+            {sessionState && (
+              <span>
+                Created: {new Date(sessionState.createdAt).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+
+          {errorMessage && (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-600">
+              {errorMessage}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={
+                connectionState !== "connected" ||
+                sessionState?.status !== "lobby"
+              }
+              onClick={() => sendMessage({ type: "start_game" })}
+              className={clsx(
+                "inline-flex rounded-full px-4 py-1.5 text-xs font-semibold transition",
+                connectionState === "connected" &&
+                  sessionState?.status === "lobby"
+                  ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-500",
+              )}
+            >
+              Start game
+            </button>
+            <button
+              type="button"
+              disabled={
+                connectionState !== "connected" ||
+                sessionState?.status !== "active"
+              }
+              onClick={() => sendMessage({ type: "end_game" })}
+              className={clsx(
+                "inline-flex rounded-full px-4 py-1.5 text-xs font-semibold transition",
+                connectionState === "connected" &&
+                  sessionState?.status === "active"
+                  ? "bg-rose-600 text-white hover:bg-rose-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-500",
+              )}
+            >
+              End game
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Players
+            </h4>
+            <ul className="mt-3 space-y-2 text-xs">
+              {players.length === 0 && (
+                <li className="text-slate-500">No players yet</li>
+              )}
+              {players.map((player, index) => (
+                <li
+                  key={player.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-2"
+                >
+                  <span>
+                    <span className="mr-2 font-semibold text-slate-400">
+                      #{index + 1}
+                    </span>
+                    <span className="font-semibold text-slate-900">
+                      {player.name}
+                    </span>
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {player.score} pts
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function LiveSessionLauncher() {
@@ -72,6 +300,9 @@ export default function LiveSessionLauncher() {
   const [notes, setNotes] = useState("");
   const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const searchParams = useSearchParams();
+  const tokenParam = searchParams.get("host");
 
   useEffect(() => {
     setSessions(loadLiveSessions());
@@ -102,14 +333,13 @@ export default function LiveSessionLauncher() {
     try {
       setCreating(true);
       setErrorMessage(null);
-
       const response = await createLiveSession(selectedGame.id);
 
       const record: LiveSessionRecord = {
         id: crypto.randomUUID(),
         gameId: selectedGame.id,
         gameTitle: selectedGame.title,
-        joinCode: response.code,
+        joinCode: response.code.toUpperCase(),
         hostToken: response.hostToken,
         hostName: hostName.trim() || "Host",
         createdAt: new Date().toISOString(),
@@ -123,7 +353,9 @@ export default function LiveSessionLauncher() {
     } catch (error) {
       console.error(error);
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to create session",
+        error instanceof Error
+          ? error.message
+          : "Failed to create live session",
       );
     } finally {
       setCreating(false);
@@ -154,9 +386,8 @@ export default function LiveSessionLauncher() {
             Launch a live session
           </h1>
           <p className="max-w-2xl text-sm text-slate-600">
-            Spin up a real-time puzzle game just like Kahoot. Share the join
-            code or QR code with players, then use the host token to run the
-            game from your facilitator view.
+            Create and manage real-time puzzle sessions. Share the join code or
+            QR code with players, then control the flow from the host console.
           </p>
         </div>
       </header>
@@ -164,9 +395,8 @@ export default function LiveSessionLauncher() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Create session</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Choose a puzzle, name the host, and add any prep notes. Creating a
-          session generates a join code and QR code that you can share with
-          players.
+          Choose a puzzle, set a host name, and optionally add prep notes.
+          We&apos;ll generate join details for players and a host token for you.
         </p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -220,7 +450,7 @@ export default function LiveSessionLauncher() {
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                  Run the puzzle once to see local performance insights.
+                  Run the puzzle once to see recent performance stats.
                 </div>
               )}
             </div>
@@ -239,8 +469,8 @@ export default function LiveSessionLauncher() {
 
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
             <p>
-              We&apos;ll generate a join code your players can enter, plus a
-              host token to authenticate the facilitator app.
+              We&apos;ll generate a join code and QR code for players, and a
+              host token for you to control the session.
             </p>
             {errorMessage && (
               <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-600">
@@ -254,7 +484,7 @@ export default function LiveSessionLauncher() {
               className={clsx(
                 "inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition",
                 creating
-                  ? "cursor-not-allowed bg-slate-400 text-white"
+                  ? "cursor-not-allowed bg-slate-200 text-slate-500"
                   : "bg-slate-900 text-white hover:bg-slate-700",
               )}
             >
@@ -285,8 +515,9 @@ export default function LiveSessionLauncher() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {sessions.map((session) => {
-              const joinUrl = `${origin}/play?session=${session.joinCode}`;
+              const joinUrl = `${origin}/live?session=${session.joinCode}`;
               const hostUrl = `${origin}/admin/live?host=${session.hostToken}`;
+              const initiallyOpen = tokenParam === session.hostToken;
 
               return (
                 <div
@@ -377,6 +608,8 @@ export default function LiveSessionLauncher() {
                       </span>
                     </div>
                   </div>
+
+                  <HostConsole record={session} initiallyOpen={initiallyOpen} />
                 </div>
               );
             })}
