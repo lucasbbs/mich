@@ -1,5 +1,6 @@
 ﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseClient, supabase } from "./client";
+import { SupabaseOptions } from "./games";
 
 const TABLE_NAME = "sessions";
 
@@ -13,10 +14,6 @@ export interface SessionRecord {
 export interface SaveSessionRecordInput {
   sessionId: string;
   gameId?: number | null;
-}
-
-export interface SupabaseOptions {
-  sessionToken?: string | null;
 }
 
 async function resolveClient(

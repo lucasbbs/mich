@@ -5,4 +5,5 @@ export * from "./session-storage";
 export * from "../services/rapid-task";
 export * from "../services/live-sessions";
 export * from "../services/games";
+export * from "../services/sessions"
 
