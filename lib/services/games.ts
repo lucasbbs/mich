@@ -1,5 +1,6 @@
-﻿import type { GameWord } from "../game/types";
-import { getSupabaseClient } from "./supabase-client";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
+import type { GameWord } from "../game/types";
+import { createSupabaseClient, supabase } from "./client";
 
 const TABLE_NAME = "games";
 
@@ -18,11 +19,25 @@ export interface GameRecord {
   created_at: string;
 }
 
+export interface SupabaseOptions {
+  sessionToken?: string | null;
+}
+
+async function resolveClient(
+  options?: SupabaseOptions,
+): Promise<SupabaseClient> {
+  if (options?.sessionToken) {
+    return createSupabaseClient(options.sessionToken);
+  }
+  return supabase;
+}
+
 export async function saveGameConfiguration(
   name: string,
   payload: GameBuilderExport,
+  options?: SupabaseOptions,
 ): Promise<GameRecord> {
-  const client = getSupabaseClient();
+  const client = await resolveClient(options);
   const trimmedName = name.trim();
 
   if (!trimmedName) {
@@ -52,8 +67,10 @@ export async function saveGameConfiguration(
   return data as GameRecord;
 }
 
-export async function listGameConfigurations(): Promise<GameRecord[]> {
-  const client = getSupabaseClient();
+export async function listGameConfigurations(
+  options?: SupabaseOptions,
+): Promise<GameRecord[]> {
+  const client = await resolveClient(options);
   const { data, error } = await client
     .from(TABLE_NAME)
     .select("id, name, games, created_at")
@@ -65,5 +82,3 @@ export async function listGameConfigurations(): Promise<GameRecord[]> {
 
   return (data ?? []) as GameRecord[];
 }
-
-

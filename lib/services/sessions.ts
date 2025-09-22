@@ -1,4 +1,5 @@
-﻿import { getSupabaseClient } from "./supabase-client";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseClient, supabase } from "./client";
 
 const TABLE_NAME = "sessions";
 
@@ -14,10 +15,24 @@ export interface SaveSessionRecordInput {
   gameId?: number | null;
 }
 
+export interface SupabaseOptions {
+  sessionToken?: string | null;
+}
+
+async function resolveClient(
+  options?: SupabaseOptions,
+): Promise<SupabaseClient> {
+  if (options?.sessionToken) {
+    return createSupabaseClient(options.sessionToken);
+  }
+  return supabase;
+}
+
 export async function saveSessionRecord(
   payload: SaveSessionRecordInput,
+  options?: SupabaseOptions,
 ): Promise<SessionRecord> {
-  const client = getSupabaseClient();
+  const client = await resolveClient(options);
   const { sessionId, gameId = null } = payload;
 
   const { data, error } = await client
