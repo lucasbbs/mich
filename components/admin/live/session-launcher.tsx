@@ -5,11 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 import clsx from "clsx";
 import {
-  SAMPLE_GAMES,
   createLiveSession,
+  listGameConfigurations,
   loadSessions,
-  type StoredSession,
+  saveSessionRecord,
 } from "@/lib/game";
+import type { GameRecord, StoredSession } from "@/lib/game";
 
 interface LiveSessionRecord {
   id: string;
@@ -54,6 +55,21 @@ const EDGE_HTTP_BASE = (
 const FUNCTION_NAME = process.env.NEXT_PUBLIC_LIVE_FUNCTION_NAME ?? "";
 
 const EDGE_WS_BASE = EDGE_HTTP_BASE.replace(/^http/, "ws");
+
+function deriveGameTitle(record: GameRecord): string {
+  const explicitName =
+    typeof record.name === "string" ? record.name.trim() : "";
+  if (explicitName) {
+    return explicitName;
+  }
+
+  const title = record.games?.title;
+  if (typeof title === "string" && title.trim()) {
+    return title.trim();
+  }
+
+  return `Game #${record.id}`;
+}
 
 function loadLiveSessions(): LiveSessionRecord[] {
   if (typeof window === "undefined") {
@@ -293,9 +309,10 @@ function HostConsole({
 export default function LiveSessionLauncher() {
   const [sessions, setSessions] = useState<LiveSessionRecord[]>([]);
   const [playerStats, setPlayerStats] = useState<StoredSession[]>([]);
-  const [selectedGameId, setSelectedGameId] = useState<string>(
-    SAMPLE_GAMES[0]?.id ?? "",
-  );
+  const [games, setGames] = useState<GameRecord[]>([]);
+  const [gamesLoading, setGamesLoading] = useState(true);
+  const [gamesError, setGamesError] = useState<string | null>(null);
+  const [selectedGameId, setSelectedGameId] = useState<string>("");
   const [hostName, setHostName] = useState("Host");
   const [notes, setNotes] = useState("");
   const [creating, setCreating] = useState(false);
@@ -309,17 +326,70 @@ export default function LiveSessionLauncher() {
     setPlayerStats(loadSessions());
   }, []);
 
-  const selectedGame = useMemo(
-    () => SAMPLE_GAMES.find((game) => game.id === selectedGameId) ?? null,
-    [selectedGameId],
-  );
+  useEffect(() => {
+    let active = true;
+
+    const fetchGames = async () => {
+      try {
+        setGamesLoading(true);
+        setGamesError(null);
+        const data = await listGameConfigurations();
+        if (!active) {
+          return;
+        }
+        setGames(data);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        console.error("Failed to load game configurations", error);
+        setGames([]);
+        setGamesError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load games from Supabase.",
+        );
+      } finally {
+        if (active) {
+          setGamesLoading(false);
+        }
+      }
+    };
+
+    fetchGames();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedGameId && games.length > 0) {
+      setSelectedGameId(String(games[0].id));
+    }
+  }, [games, selectedGameId]);
+
+  const selectedGame = useMemo(() => {
+    if (!selectedGameId) {
+      return null;
+    }
+
+    const numericId = Number(selectedGameId);
+    if (Number.isNaN(numericId)) {
+      return null;
+    }
+
+    return games.find((game) => game.id === numericId) ?? null;
+  }, [games, selectedGameId]);
 
   const latestStats = useMemo(() => {
     if (!selectedGame) {
       return null;
     }
     return (
-      playerStats.find((session) => session.gameId === selectedGame.id) ?? null
+      playerStats.find(
+        (session) => session.gameId === String(selectedGame.id),
+      ) ?? null
     );
   }, [playerStats, selectedGame]);
 
@@ -327,18 +397,35 @@ export default function LiveSessionLauncher() {
 
   const createSessionHandler = async () => {
     if (!selectedGame) {
+      setErrorMessage("Select a puzzle before creating a session.");
       return;
     }
 
     try {
       setCreating(true);
       setErrorMessage(null);
-      const response = await createLiveSession(selectedGame.id);
+      const response = await createLiveSession(String(selectedGame.id));
+
+      let persistenceError: string | null = null;
+      try {
+        await saveSessionRecord({
+          sessionId: response.code,
+          gameId: selectedGame.id,
+        });
+      } catch (supabaseError) {
+        console.error("Failed to save session record", supabaseError);
+        persistenceError =
+          supabaseError instanceof Error
+            ? supabaseError.message
+            : "Session created, but failed to persist in Supabase.";
+      }
+
+      const gameTitle = deriveGameTitle(selectedGame);
 
       const record: LiveSessionRecord = {
         id: crypto.randomUUID(),
-        gameId: selectedGame.id,
-        gameTitle: selectedGame.title,
+        gameId: String(selectedGame.id),
+        gameTitle,
         joinCode: response.code.toUpperCase(),
         hostToken: response.hostToken,
         hostName: hostName.trim() || "Host",
@@ -350,6 +437,10 @@ export default function LiveSessionLauncher() {
       setSessions(next);
       saveLiveSessions(next);
       setNotes("");
+
+      if (persistenceError) {
+        setErrorMessage(persistenceError);
+      }
     } catch (error) {
       console.error(error);
       setErrorMessage(
@@ -407,13 +498,28 @@ export default function LiveSessionLauncher() {
                 className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-900 focus:border-slate-500 focus:outline-none"
                 value={selectedGameId}
                 onChange={(event) => setSelectedGameId(event.target.value)}
+                disabled={gamesLoading || games.length === 0}
               >
-                {SAMPLE_GAMES.map((game) => (
-                  <option key={game.id} value={game.id}>
-                    {game.title}
-                  </option>
-                ))}
+                {gamesLoading ? (
+                  <option value="">Loading games…</option>
+                ) : games.length > 0 ? (
+                  games.map((game) => (
+                    <option key={game.id} value={String(game.id)}>
+                      {deriveGameTitle(game)}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No saved games found</option>
+                )}
               </select>
+              {gamesError ? (
+                <span className="mt-2 text-xs text-rose-600">{gamesError}</span>
+              ) : null}
+              {!gamesLoading && !gamesError && games.length === 0 ? (
+                <span className="mt-2 text-xs text-slate-500">
+                  Save a game in the builder to launch a live session.
+                </span>
+              ) : null}
             </label>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -479,7 +585,7 @@ export default function LiveSessionLauncher() {
             )}
             <button
               type="button"
-              disabled={creating}
+              disabled={creating || !selectedGame}
               onClick={createSessionHandler}
               className={clsx(
                 "inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition",
@@ -619,3 +725,4 @@ export default function LiveSessionLauncher() {
     </div>
   );
 }
+

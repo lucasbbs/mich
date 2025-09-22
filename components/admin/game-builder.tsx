@@ -9,7 +9,9 @@ import {
   buildLetterMap,
   evaluateWordPlacement,
   fromCellKey,
+  saveGameConfiguration,
   toCellKey,
+  type GameBuilderExport,
   type GameWord,
   type Orientation,
   type PlacementIssue,
@@ -63,6 +65,7 @@ export default function GameBuilder() {
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
   const [disabledCells, setDisabledCells] = useState<Set<string>>(new Set());
   const [words, setWords] = useState<GameWord[]>([]);
+  const [gameTitle, setGameTitle] = useState("");
   const [disableMode, setDisableMode] = useState(false);
   const [editingWordId, setEditingWordId] = useState<string | null>(null);
   const [formState, setFormState] = useState<WordFormState>({
@@ -75,6 +78,7 @@ export default function GameBuilder() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const sortedWords = useMemo(
     () => [...words].sort((a, b) => a.number - b.number),
@@ -87,7 +91,9 @@ export default function GameBuilder() {
 
     words.forEach((word) => {
       const key = toCellKey(word.start.row, word.start.col);
-      tracker[key] = tracker[key] ? [...tracker[key], word.number] : [word.number];
+      tracker[key] = tracker[key]
+        ? [...tracker[key], word.number]
+        : [word.number];
     });
 
     Object.keys(tracker).forEach((key) => {
@@ -124,8 +130,9 @@ export default function GameBuilder() {
   const disabledCount = disabledCells.size;
   const playableCount = totalCells - disabledCount;
 
-  const exportData = useMemo(
+  const exportData = useMemo<GameBuilderExport>(
     () => ({
+      title: gameTitle.trim() || undefined,
       rows,
       columns,
       disabledCells: Array.from(disabledCells).sort((a, b) =>
@@ -140,7 +147,7 @@ export default function GameBuilder() {
         cells: word.cells,
       })),
     }),
-    [rows, columns, disabledCells, sortedWords],
+    [gameTitle, rows, columns, disabledCells, sortedWords],
   );
 
   useEffect(() => {
@@ -209,12 +216,7 @@ export default function GameBuilder() {
 
       previous.forEach((key) => {
         const { row, col } = fromCellKey(key);
-        if (
-          row >= 1 &&
-          row <= nextRows &&
-          col >= 1 &&
-          col <= nextColumns
-        ) {
+        if (row >= 1 && row <= nextRows && col >= 1 && col <= nextColumns) {
           next.add(key);
         } else {
           mutated = true;
@@ -372,9 +374,7 @@ export default function GameBuilder() {
     }
 
     const baseLetterMap = buildLetterMap(
-      editingWordId
-        ? words.filter((word) => word.id !== editingWordId)
-        : words,
+      editingWordId ? words.filter((word) => word.id !== editingWordId) : words,
     );
 
     const placement = evaluateWordPlacement({
@@ -408,7 +408,9 @@ export default function GameBuilder() {
 
     setWords((previous) => {
       if (editingWordId) {
-        return previous.map((word) => (word.id === editingWordId ? payload : word));
+        return previous.map((word) =>
+          word.id === editingWordId ? payload : word,
+        );
       }
       return [...previous, payload];
     });
@@ -465,6 +467,42 @@ export default function GameBuilder() {
     });
   };
 
+  const handleGameSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
+    const trimmedTitle = gameTitle.trim();
+    if (!trimmedTitle) {
+      showBanner("error", "Add a game name before saving.");
+      return;
+    }
+
+    if (!sortedWords.length) {
+      showBanner("error", "Add at least one word before saving the game.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const payload: GameBuilderExport = {
+        ...exportData,
+        title: trimmedTitle,
+      };
+      const record = await saveGameConfiguration(trimmedTitle, payload);
+      showBanner("success", `Game "${trimmedTitle}" saved to Supabase (record #${record.id}).`);
+    } catch (error) {
+      console.error("Failed to save game", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to save game. Please try again.";
+      showBanner("error", message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-10">
       <header className="space-y-3">
@@ -472,9 +510,10 @@ export default function GameBuilder() {
           Game builder
         </h1>
         <p className="max-w-2xl text-sm text-slate-600">
-          Configure your puzzle grid, mark unavailable cells, and attach numbered
-          words with the hints solvers will see. Everything below updates in
-          real-time, so you always know what the final board will look like.
+          Configure your puzzle grid, mark unavailable cells, and attach
+          numbered words with the hints solvers will see. Everything below
+          updates in real-time, so you always know what the final board will
+          look like.
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-slate-600">
           <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1">
@@ -495,8 +534,10 @@ export default function GameBuilder() {
             "rounded-2xl border px-4 py-3 text-sm",
             banner.type === "success" &&
               "border-emerald-200 bg-emerald-50 text-emerald-700",
-            banner.type === "info" && "border-slate-200 bg-slate-100 text-slate-700",
-            banner.type === "error" && "border-rose-200 bg-rose-50 text-rose-700",
+            banner.type === "info" &&
+              "border-slate-200 bg-slate-100 text-slate-700",
+            banner.type === "error" &&
+              "border-rose-200 bg-rose-50 text-rose-700",
           )}
         >
           {banner.message}
@@ -507,6 +548,16 @@ export default function GameBuilder() {
         <section className="space-y-8">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <label className="flex flex-col text-sm font-medium text-slate-600">
+                Game name
+                <input
+                  type="text"
+                  value={gameTitle}
+                  onChange={(event) => setGameTitle(event.target.value)}
+                  placeholder="E.g. Orchard Opener"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-base font-semibold text-slate-900 focus:border-slate-500 focus:outline-none sm:w-64"
+                />
+              </label>
               <label className="flex flex-col text-sm font-medium text-slate-600">
                 Rows
                 <input
@@ -577,7 +628,8 @@ export default function GameBuilder() {
                             disabled
                               ? "cursor-pointer border-slate-200 bg-slate-200 text-slate-400"
                               : "cursor-pointer border-slate-300 bg-white text-slate-800 hover:border-slate-500",
-                            letter && !disabled &&
+                            letter &&
+                              !disabled &&
                               "bg-slate-900 text-white hover:border-slate-900",
                             isEditingCell &&
                               "ring-2 ring-indigo-400 ring-offset-2 ring-offset-white",
@@ -604,6 +656,33 @@ export default function GameBuilder() {
               Copy this JSON payload into your storage layer or share it with
               teammates to keep everyone synced on the latest configuration.
             </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleGameSave}
+                disabled={
+                  isSaving || !gameTitle.trim() || sortedWords.length === 0
+                }
+                className={clsx(
+                  "inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold transition",
+                  isSaving || !gameTitle.trim() || sortedWords.length === 0
+                    ? "cursor-not-allowed bg-slate-300 text-slate-500"
+                    : "bg-slate-900 text-white hover:bg-slate-700",
+                )}
+              >
+                {isSaving ? "Saving..." : "Save to Supabase"}
+              </button>
+              {!gameTitle.trim() && (
+                <span className="text-xs text-rose-600">
+                  Name your game to enable saving.
+                </span>
+              )}
+              {sortedWords.length === 0 && (
+                <span className="text-xs text-rose-600">
+                  Add at least one word to enable saving.
+                </span>
+              )}
+            </div>
             <pre className="mt-4 max-h-72 overflow-auto rounded-2xl bg-slate-900 p-4 text-xs text-slate-100">
               {JSON.stringify(exportData, null, 2)}
             </pre>
@@ -630,7 +709,10 @@ export default function GameBuilder() {
                   onChange={(event) =>
                     setFormState((previous) => ({
                       ...previous,
-                      number: Math.max(1, Math.floor(Number(event.target.value) || 1)),
+                      number: Math.max(
+                        1,
+                        Math.floor(Number(event.target.value) || 1),
+                      ),
                     }))
                   }
                   className="mt-1 w-28 rounded-lg border border-slate-200 px-3 py-2 text-base font-semibold text-slate-900 focus:border-slate-500 focus:outline-none"
@@ -687,7 +769,10 @@ export default function GameBuilder() {
                           ...previous,
                           startRow: Math.min(
                             rows,
-                            Math.max(1, Math.floor(Number(event.target.value) || 1)),
+                            Math.max(
+                              1,
+                              Math.floor(Number(event.target.value) || 1),
+                            ),
                           ),
                         }))
                       }
@@ -707,7 +792,10 @@ export default function GameBuilder() {
                           ...previous,
                           startCol: Math.min(
                             columns,
-                            Math.max(1, Math.floor(Number(event.target.value) || 1)),
+                            Math.max(
+                              1,
+                              Math.floor(Number(event.target.value) || 1),
+                            ),
                           ),
                         }))
                       }
@@ -719,7 +807,9 @@ export default function GameBuilder() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-600">Hints</span>
+                  <span className="text-sm font-medium text-slate-600">
+                    Hints
+                  </span>
                   <button
                     type="button"
                     onClick={handleAddHint}
@@ -730,7 +820,10 @@ export default function GameBuilder() {
                 </div>
                 <div className="space-y-3">
                   {formState.hints.map((hint, index) => (
-                    <div key={`hint-${index}`} className="rounded-2xl border border-slate-200 p-3">
+                    <div
+                      key={`hint-${index}`}
+                      className="rounded-2xl border border-slate-200 p-3"
+                    >
                       <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
                         <span>Hint {index + 1}</span>
                         {formState.hints.length > 1 && (
@@ -745,7 +838,9 @@ export default function GameBuilder() {
                       </div>
                       <textarea
                         value={hint}
-                        onChange={(event) => handleHintChange(index, event.target.value)}
+                        onChange={(event) =>
+                          handleHintChange(index, event.target.value)
+                        }
                         rows={2}
                         placeholder="Describe the answer or give solvers a nudge."
                         className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none"
@@ -790,8 +885,8 @@ export default function GameBuilder() {
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              Words are ordered by clue number. Selecting a word loads it into the
-              form for quick adjustments.
+              Words are ordered by clue number. Selecting a word loads it into
+              the form for quick adjustments.
             </p>
 
             <div className="mt-4 space-y-3">
@@ -854,3 +949,4 @@ export default function GameBuilder() {
     </div>
   );
 }
+
